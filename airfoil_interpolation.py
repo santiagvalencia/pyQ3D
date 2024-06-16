@@ -1,5 +1,6 @@
 import aerosandbox as asb
 import numpy as np
+from scipy.interpolate import interp1d
 
 
 def get_mean_sweep(
@@ -103,6 +104,7 @@ def get_perp_line(y_nondim, sec1: asb.WingXSec, sec2: asb.WingXSec, xi_c=0.25):
         "x_le": x_le,
         "y_le": y_le,
         "chord_perp": chord_perp,
+        "lambda_qc": lambda_qc,
     }
 
 
@@ -116,7 +118,9 @@ def get_interpolation_weights(y_nondim, x_nondims, sec1, sec2, xi_c=0.25):
     weights_tip = []
     weights_root = []
 
-    for x_nondim in x_nondims:
+    x_nondims_geom_axes = np.array(x_nondims) * np.cos(data["lambda_qc"])
+
+    for x_nondim in x_nondims_geom_axes:
         x_root = x_le_root + x_nondim * sec1.chord
         x_tip = x_le_tip + x_nondim * sec2.chord
 
@@ -135,4 +139,56 @@ def get_interpolation_weights(y_nondim, x_nondims, sec1, sec2, xi_c=0.25):
     return np.array(weights_root), np.array(weights_tip)
 
 
-def find_interpolated_airfoil(): ...
+def interpolate_airfoil_chordwise(af: asb.Airfoil):
+
+    top_function = interp1d(
+        af.upper_coordinates()[:, 0],
+        af.upper_coordinates()[:, 1],
+        kind="cubic",
+        fill_value="extrapolate",
+    )
+
+    bottom_function = interp1d(
+        af.lower_coordinates()[:, 0],
+        af.lower_coordinates()[:, 1],
+        kind="cubic",
+        fill_value="extrapolate",
+    )
+
+    return top_function, bottom_function
+
+
+def find_interpolated_airfoil(
+    y_nondim, x_nondims, sec1: asb.WingXSec, sec2: asb.WingXSec, xi_c=0.25
+):
+
+    weights_root, weights_tip = get_interpolation_weights(
+        y_nondim, x_nondims, sec1, sec2, xi_c=xi_c
+    )
+
+    weights_root_extended = np.concatenate((weights_root, weights_root[::-1]))
+    weights_tip_extended = np.concatenate((weights_tip, weights_tip[::-1]))
+
+    af_1 = sec1.airfoil
+    af_2 = sec2.airfoil
+
+    af_1_top, af_1_bottom = interpolate_airfoil_chordwise(af_1)
+    af_2_top, af_2_bottom = interpolate_airfoil_chordwise(af_2)
+
+    af_1_interpolated_z = np.concatenate(
+        (af_1_top(x_nondims), af_1_bottom(x_nondims)[::-1])
+    )
+
+    af_2_interpolated_z = np.concatenate(
+        (af_2_top(x_nondims), af_2_bottom(x_nondims)[::-1])
+    )
+
+    new_af_z = (
+        af_1_interpolated_z * weights_root_extended
+        + af_2_interpolated_z * weights_tip_extended
+    )
+    new_af_x = np.concatenate((x_nondims, x_nondims[::-1]))
+
+    new_airfoil = asb.Airfoil(coordinates=np.column_stack((new_af_x, new_af_z)))
+
+    return new_airfoil
