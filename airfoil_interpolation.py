@@ -21,4 +21,89 @@ def get_mean_sweep(
     return sweep_angle
 
 
+def get_xyz_le_from_xsec(sec: asb.WingXSec):
+    return tuple(sec.xyz_le)
+
+
+def get_spanwise_equal_chord_line(
+    x_1,
+    y_1,
+    x_2,
+    y_2,
+    inverse=False,
+    return_as_dict=False,
+):
+    slope = (y_2 - y_1) / (x_2 - x_1)
+    intercept = y_1 - slope * x_1
+
+    if inverse:
+        intercept = -intercept / slope
+        slope = 1 / slope
+
+    if return_as_dict:
+        return {"slope": slope, "intercept": intercept}
+
+    return lambda x: slope * x + intercept
+
+
+def get_line_intersection(dict_1, dict_2):
+    m_1 = dict_1["slope"]
+    b_1 = dict_1["intercept"]
+
+    m_2 = dict_2["slope"]
+    b_2 = dict_2["intercept"]
+
+    x = (b_1 - b_2) / (m_2 - m_1)
+    y = (b_1 * m_2 - b_2 * m_1) / (m_2 - m_1)
+
+    return x, y
+
+
+def get_perp_line(y_nondim, sec1: asb.WingXSec, sec2: asb.WingXSec, xi_c=0.25):
+
+    x_root, y_root, _ = get_xyz_le_from_xsec(sec1)
+    x_tip, y_tip, _ = get_xyz_le_from_xsec(sec2)
+
+    span = y_tip - y_root
+
+    # find leading edge point of interest
+    y_le = y_nondim * span
+
+    f_le = get_spanwise_equal_chord_line(x_root, y_root, x_tip, y_tip, inverse=True)
+
+    x_le = f_le(y_le)
+
+    # find quarter-chord line
+    lambda_qc = get_mean_sweep(sec1, sec2, xi_c, radians=True)
+    dict_perp_qc = {
+        "slope": -np.tan(lambda_qc),
+        "intercept": -np.tan(lambda_qc) * -x_le + y_le,
+    }
+
+    # find trailing edge line
+    x_te_root = x_root + sec1.chord
+    x_te_tip = x_tip + sec2.chord
+
+    y_te_root = y_root
+    y_te_tip = y_tip
+
+    dict_te = get_spanwise_equal_chord_line(
+        x_te_root, y_te_root, x_te_tip, y_te_tip, return_as_dict=True
+    )
+
+    # find trailing edge point of interest
+    x_te, y_te = get_line_intersection(dict_te, dict_perp_qc)
+
+    chord_perp = np.sqrt((x_le - x_te) ** 2 + (y_le - y_te) ** 2)
+
+    return {
+        "line_dict": dict_perp_qc,
+        "x_te": x_te,
+        "y_te": y_te,
+        "x_le": x_le,
+        "y_le": y_le,
+        "chord_perp": chord_perp,
+    }
+
+
 def find_interpolated_airfoil(): ...
