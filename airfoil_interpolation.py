@@ -106,4 +106,33 @@ def get_perp_line(y_nondim, sec1: asb.WingXSec, sec2: asb.WingXSec, xi_c=0.25):
     }
 
 
+def get_interpolation_weights(y_nondim, x_nondims, sec1, sec2, xi_c=0.25):
+
+    data = get_perp_line(y_nondim, sec1, sec2, xi_c=xi_c)
+
+    x_le_root, y_le_root, _ = get_xyz_le_from_xsec(sec1)
+    x_le_tip, y_le_tip, _ = get_xyz_le_from_xsec(sec2)
+
+    weights_tip = []
+    weights_root = []
+
+    for x_nondim in x_nondims:
+        x_root = x_le_root + x_nondim * sec1.chord
+        x_tip = x_le_tip + x_nondim * sec2.chord
+
+        line = get_spanwise_equal_chord_line(
+            x_root, y_le_root, x_tip, y_le_tip, return_as_dict=True
+        )
+
+        x_i, y_i = get_line_intersection(data["line_dict"], line)
+
+        w_tip = y_i / (y_le_tip - y_le_root)
+        w_root = 1 - w_tip
+
+        weights_tip.append(w_tip)
+        weights_root.append(w_root)
+
+    return np.array(weights_root), np.array(weights_tip)
+
+
 def find_interpolated_airfoil(): ...
