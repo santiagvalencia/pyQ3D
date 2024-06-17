@@ -1,2 +1,6 @@
 *.ipynb
 __pycache__/
+*.exe
+*.avl
+*.txt
+*.af*
