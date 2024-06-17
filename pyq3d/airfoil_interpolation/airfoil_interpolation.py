@@ -4,6 +4,18 @@ import aerosandbox as asb
 import numpy as np
 from scipy.interpolate import interp1d
 
+__all__ = [
+    "calculate_mean_sweep_angle",
+    "get_xyz_le_from_xsec",
+    "get_spanwise_equal_chord_line",
+    "get_line_intersection",
+    "get_perp_line",
+    "get_interpolation_weights",
+    "interpolate_airfoil",
+    "interpolate_airfoil_chordwise",
+    "find_interpolated_airfoil",
+]
+
 
 def calculate_mean_sweep_angle(
     sec1: asb.WingXSec,
@@ -255,8 +267,37 @@ def interpolate_airfoil_chordwise(af: asb.Airfoil, x_nondims: Union[List, np.nda
     return af_interpolated_z
 
 
+def _ensure_descending_order(arr: Union[List, np.ndarray]) -> Union[List, np.ndarray]:
+    """
+    Check if the input array or list is in descending order.
+    If it is, return the original array or list.
+    If it is not, return an inverted copy of the array or list.
+
+    Args:
+        arr (Union[list, np.ndarray]): An array or list of floats expected to contain numbers between 0 and 1.
+
+    Returns:
+        Union[list, np.ndarray]: The original array or list if it's in descending order,
+                                 otherwise an inverted copy of the array or list.
+    """
+    # Convert list to numpy array if it's not already
+    if isinstance(arr, list):
+        arr = np.array(arr)
+
+    # Check if the array is in descending order
+    if np.all(arr[:-1] >= arr[1:]):
+        return arr if isinstance(arr, np.ndarray) else arr.tolist()
+    else:
+        # Return an inverted copy
+        return arr[::-1] if isinstance(arr, np.ndarray) else arr[::-1].tolist()
+
+
 def find_interpolated_airfoil(
-    y_nondim, x_nondims, sec1: asb.WingXSec, sec2: asb.WingXSec, xi_c=0.25
+    y_nondim: float,
+    x_nondims: Union[List, np.ndarray],
+    sec1: asb.WingXSec,
+    sec2: asb.WingXSec,
+    xi_c: float = 0.25,
 ):
     """
     Find the interpolated airfoil at a given spanwise position.
@@ -271,6 +312,9 @@ def find_interpolated_airfoil(
     Returns:
         asb.Airfoil: The interpolated airfoil.
     """
+
+    x_nondims = _ensure_descending_order(x_nondims)
+
     weights_root, weights_tip = get_interpolation_weights(
         y_nondim, x_nondims, sec1, sec2, xi_c=xi_c
     )
@@ -290,6 +334,8 @@ def find_interpolated_airfoil(
     )
     new_af_x = np.concatenate((x_nondims, x_nondims[::-1]))
 
-    new_airfoil = asb.Airfoil(coordinates=np.column_stack((new_af_x, new_af_z)))
+    coordinates = np.column_stack((new_af_x, new_af_z))
+
+    new_airfoil = asb.Airfoil(coordinates=coordinates)
 
     return new_airfoil
